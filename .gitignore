@@ -12,3 +12,5 @@ backend/**/target/
 # Node.js (frontend)
 frontend/node_modules/
 frontend/dist/
+
+memory-bank/*
