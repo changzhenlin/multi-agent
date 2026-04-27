@@ -1,0 +1,14 @@
+# Maven build output
+backend/**/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Node.js (frontend)
+frontend/node_modules/
+frontend/dist/
