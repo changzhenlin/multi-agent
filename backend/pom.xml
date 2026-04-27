@@ -32,6 +32,7 @@
         <module>agent-simple</module>
         <module>agent-rag</module>
         <module>agent-sql</module>
+        <module>chat-web</module>
     </modules>
 
     <dependencyManagement>
