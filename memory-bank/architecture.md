@@ -58,6 +58,7 @@ multi-agent-chat/
 │   │
 │   └── chat-web/                      # Web 主模块（Controller + 编排）
 │       └── src/main/java/com/company/chat/web/
+│           ├── ChatWebApplication.java
 │           ├── controller/
 │           │   └── ChatController.java
 │           ├── dto/                   # REST API 请求 / 响应 DTO
@@ -67,6 +68,13 @@ multi-agent-chat/
 │           │   └── SessionSummaryResponse.java
 │           ├── orchestrator/
 │           │   └── ChatOrchestrator.java
+│           ├── llm/                   # LLM 客户端实现与 provider 装配
+│           │   ├── KimiLlmClient.java
+│           │   ├── MockLlmClient.java
+│           │   ├── LlmClientFactory.java
+│           │   ├── LlmConfiguration.java
+│           │   ├── LlmProperties.java
+│           │   └── LlmProvider.java
 │           └── config/
 │               └── WebConfig.java
 │       └── src/main/resources/
@@ -247,6 +255,14 @@ public interface ChatAgent {
 - `RagAgent`：检索增强生成
 - `ServiceSqlAgent`：NL2SQL 查询
 
+`SimpleChatAgent` 当前通过构造器注入 `LlmClient` 和系统 Prompt。处理流程为：
+
+1. 添加 `system` 消息，默认 Prompt 为“你是一个企业内部助手，请用准确、简洁、专业的方式回答员工问题。”
+2. 追加 `ChatContext.history()` 中的历史消息
+3. 追加当前用户消息
+4. 调用 `LlmClient.streamChat(...)`
+5. 将 Reactor `Flux<String>` 转换为接口要求的 Java `Stream<String>`
+
 ### 4.2 AgentRouter
 
 ```java
@@ -275,6 +291,14 @@ public interface IntentRecognizer {
 - `KeywordIntentRecognizer`：基于关键词规则（初版）
 - `LlmIntentRecognizer`：基于 LLM 判断（升级版）
 
+`KeywordIntentRecognizer` 当前位于 `chat-web`，通过 `intent.sql-keywords` 和 `intent.rag-keywords` 配置关键词。默认优先级：
+
+1. 命中 SQL 关键词 → `SERVICE_SQL`
+2. 命中 RAG 关键词 → `RAG`
+3. 其他 → `SIMPLE_CHAT`
+
+SQL 优先于 RAG，用于处理“统计报销流程数量”这类同时包含知识库词和数据查询词的问题。
+
 ### 4.4 LlmClient
 
 ```java
@@ -290,8 +314,28 @@ public interface LlmClient {
 
 **实现类**：
 - `KimiLlmClient`：Moonshot API（默认）
-- `OpenAiLlmClient`：OpenAI API（备选）
-- `LocalLlmClient`：本地部署模型（私有化）
+- `MockLlmClient`：本地默认实现，用于无 API Key 的开发和测试
+- `OpenAiLlmClient`：OpenAI API（预留）
+- `LocalLlmClient`：本地部署模型（预留）
+
+`chat-web` 通过 `llm.provider` 配置选择实现。当前支持值：
+
+| Provider | 行为 |
+|----------|------|
+| `mock` | 返回固定 mock 流式响应，默认值 |
+| `kimi` | 调用 Moonshot `/chat/completions`，解析 SSE `choices[].delta.content` |
+| `openai` / `local` | 当前回退到 mock，后续接入具体实现 |
+
+配置项位于 `application.yml`：
+
+| 配置 | 环境变量 | 默认值 |
+|------|----------|--------|
+| `llm.provider` | `LLM_PROVIDER` | `mock` |
+| `llm.base-url` | `LLM_BASE_URL` | `https://api.moonshot.cn/v1` |
+| `llm.api-key` | `LLM_API_KEY` | 空 |
+| `llm.model` | `LLM_MODEL` | `moonshot-v1-8k` |
+
+API Key 仅通过 `LlmProperties.maskedApiKey()` 暴露脱敏形态，当前实现不记录明文 API Key。
 
 ### 4.5 EmbeddingClient
 

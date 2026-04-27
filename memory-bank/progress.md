@@ -154,7 +154,7 @@ docker exec multi-agent-redis redis-cli FT.INFO rag_index
 
 ### Step 0.4 — 项目脚手架搭建
 
-**状态**: ✅ 已完成（后端 Maven 编译待本机 Maven 可用）
+**状态**: ✅ 已完成
 
 **完成内容**:
 - 创建根目录 `docker-compose.yml`
@@ -180,7 +180,7 @@ docker exec multi-agent-redis redis-cli FT.INFO rag_index
 
 **验收标准检查**:
 - [x] 执行 `docker compose up -d` 后，MySQL、Redis、Nginx 均健康运行（宿主机 3306 被占用，使用覆盖端口验证）
-- [ ] 执行 `mvn clean install` 后端全模块编译通过（当前环境缺少 `mvn`）
+- [x] 执行 `mvn clean install` 后端全模块编译通过（使用本机 Maven 3.9.14 分发路径）
 - [x] 执行 `npm install && npm run dev` 前端正常启动
 - [x] Nginx 配置支持 `/api` 反向代理到后端，`/` 代理到前端 dev server
 
@@ -208,8 +208,8 @@ curl -I http://localhost:5173/
 curl -I http://localhost:8088/
 # HTTP/1.1 200 OK
 
-mvn clean install
-zsh:1: command not found: mvn
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn clean install
+# BUILD SUCCESS
 ```
 
 **备注**:
@@ -219,13 +219,156 @@ zsh:1: command not found: mvn
 
 ---
 
+### Step 1.1 — LLM 客户端抽象与 Kimi 接入
+
+**状态**: ✅ 已完成
+
+**完成内容**:
+- 在 `chat-web` 中实现 LLM 运行时集成：
+  - `KimiLlmClient`：基于 Spring `WebClient` 调用 Moonshot `/chat/completions`
+  - `MockLlmClient`：本地默认 mock 实现，方便无 API Key 启动
+  - `LlmClientFactory`：按 `llm.provider` 创建客户端
+  - `LlmConfiguration`：注册 `LlmClient` Bean
+  - `LlmProperties`：绑定 `llm.*` 配置并提供 API Key 脱敏
+  - `LlmProvider`：`MOCK`、`KIMI`、`OPENAI`、`LOCAL`
+- `application.yml` 新增环境变量化 LLM 配置：
+  - `LLM_PROVIDER`
+  - `LLM_BASE_URL`
+  - `LLM_API_KEY`
+  - `LLM_MODEL`
+- `chat-web` 新增 Spring Boot 启动类 `ChatWebApplication`
+- `chat-web` 新增依赖：
+  - `spring-boot-starter-webflux`
+  - `mockwebserver`（测试）
+  - `netty-resolver-dns-native-macos`（macOS 测试输出清理）
+- 增加测试：
+  - `KimiLlmClientTest`：使用 `MockWebServer` 验证 Moonshot SSE 解析、请求路径、Authorization header、请求体
+  - `LlmClientFactoryTest`：验证 provider 切换和 API Key 脱敏
+
+**验收标准检查**:
+- [x] 调用 `KimiLlmClient.streamChat()` 可收到流式字符串输出（MockWebServer SSE）
+- [x] 切换 `llm.provider` 配置项后，可路由到不同实现（Mock / Kimi）
+- [x] API Key 不出现在日志中，并提供脱敏输出方法
+- [ ] 真实 Kimi API Key 集成测试待提供 `LLM_API_KEY` 后执行
+
+**验证结果**:
+```
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn test -pl chat-web -am -Dtest='KimiLlmClientTest,LlmClientFactoryTest' -Dsurefire.failIfNoSpecifiedTests=false
+# Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+# BUILD SUCCESS
+
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn test -pl chat-web -am
+# Tests run: 6, Failures: 0, Errors: 0, Skipped: 0
+# BUILD SUCCESS
+
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn test
+# BUILD SUCCESS
+
+npm run build
+# 通过
+
+npm run lint
+# 通过
+```
+
+**备注**:
+- 当前默认 `LLM_PROVIDER=mock`，避免本地开发必须配置真实 API Key。
+- `OPENAI` 与 `LOCAL` provider 已预留枚举，目前回退到 `MockLlmClient`，后续实现对应客户端时再切换。
+
+---
+
+### Step 1.2 — 简单对话 Agent 实现
+
+**状态**: ✅ 已完成
+
+**完成内容**:
+- 实现 `agent-simple` 模块的 `SimpleChatAgent`
+  - 构造器注入 `LlmClient`
+  - 支持系统 Prompt 注入
+  - 空白系统 Prompt 自动回退到默认企业内部助手 Prompt
+  - 按顺序组装 `system`、历史消息、当前用户消息
+  - 调用 `LlmClient.streamChat(...)`，将 `Flux<String>` 转为 `Stream<String>` 返回
+- 新增 `SimpleChatAgentTest`
+  - 验证消息组装顺序
+  - 验证流式输出透传
+  - 验证默认系统 Prompt 回退
+- `agent-simple` 增加测试依赖 `spring-boot-starter-test`
+
+**验收标准检查**:
+- [x] `SimpleChatAgent` 实现类编译通过，单元测试覆盖正常流程
+- [x] 通过单元测试验证：输入“你好”，输出不为空且为流式数据
+- [x] 系统 Prompt 可通过构造器配置，空白时使用默认值
+
+**验证结果**:
+```
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn test -pl agent-simple -am -Dtest=SimpleChatAgentTest -Dsurefire.failIfNoSpecifiedTests=false
+# Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
+# BUILD SUCCESS
+
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn test
+# BUILD SUCCESS
+
+npm run build
+# 通过
+
+npm run lint
+# 通过
+```
+
+---
+
+### Step 1.3 — 意图识别服务（初版）
+
+**状态**: ✅ 已完成
+
+**完成内容**:
+- 在 `chat-web` 中实现 `KeywordIntentRecognizer`
+  - 基于关键词匹配 `SERVICE_SQL`、`RAG`、`SIMPLE_CHAT`
+  - SQL 关键词优先于 RAG 关键词
+  - 空输入或未命中关键词时默认 `SIMPLE_CHAT`
+- 新增 `IntentProperties`
+  - `intent.sql-keywords`
+  - `intent.rag-keywords`
+  - 支持通过 `application.yml` 或外部配置覆盖
+- 新增 `IntentConfiguration`
+  - 注册 `IntentRecognizer` Bean
+- `application.yml` 增加默认关键词：
+  - SQL：`多少`、`查询`、`统计`、`销售额`、`用户量`、`订单数`
+  - RAG：`流程`、`制度`、`怎么申请`、`如何申请`、`文档`、`手册`、`报销`
+- 新增 `KeywordIntentRecognizerTest`
+  - 覆盖 PRD 示例
+  - 覆盖自定义关键词覆盖默认值
+  - 覆盖同时命中 SQL/RAG 时 SQL 优先
+
+**验收标准检查**:
+- [x] 输入“你好”，识别为 `SIMPLE_CHAT`
+- [x] 输入“请假流程是什么”，识别为 `RAG`
+- [x] 输入“上个月销售额多少”，识别为 `SERVICE_SQL`
+- [x] 识别逻辑可配置，关键词列表支持外部 YAML 配置
+
+**验证结果**:
+```
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn test -pl chat-web -am -Dtest=KeywordIntentRecognizerTest -Dsurefire.failIfNoSpecifiedTests=false
+# Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
+# BUILD SUCCESS
+
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn test
+# Tests run: 9, Failures: 0, Errors: 0, Skipped: 0
+# BUILD SUCCESS
+
+npm run build
+# 通过
+
+npm run lint
+# 通过
+```
+
+---
+
 ## 待完成的步骤
 
 | 阶段 | 步骤 | 状态 |
 |------|------|------|
-| Phase 1 | Step 1.1 — LLM 客户端抽象与 Kimi 接入 | ⬜ 待开始 |
-| Phase 1 | Step 1.2 — 简单对话 Agent 实现 | ⬜ 待开始 |
-| Phase 1 | Step 1.3 — 意图识别服务（初版） | ⬜ 待开始 |
 | Phase 1 | Step 1.4 — Agent 路由与对话编排 | ⬜ 待开始 |
 | Phase 1 | Step 1.5 — 前端对话界面 | ⬜ 待开始 |
 | Phase 2 | Step 2.1 — 文档接入与文本分块 | ⬜ 待开始 |

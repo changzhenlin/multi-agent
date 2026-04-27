@@ -30,6 +30,12 @@ cd backend
 mvn spring-boot:run -pl chat-web
 ```
 
+If `mvn` is not on `PATH`, this workstation has Maven available at:
+
+```bash
+/Users/tyler/.m2/wrapper/dists/apache-maven-3.9.14-bin/1cb7fhup6b5n3bed6kckbrnspv/apache-maven-3.9.14/bin/mvn
+```
+
 Run frontend:
 
 ```bash

@@ -26,3 +26,26 @@ spring:
       password: ${REDIS_PASSWORD:}
       database: ${REDIS_DATABASE:0}
       timeout: ${REDIS_TIMEOUT:3s}
+
+llm:
+  provider: ${LLM_PROVIDER:mock}
+  base-url: ${LLM_BASE_URL:https://api.moonshot.cn/v1}
+  api-key: ${LLM_API_KEY:}
+  model: ${LLM_MODEL:moonshot-v1-8k}
+
+intent:
+  sql-keywords:
+    - 多少
+    - 查询
+    - 统计
+    - 销售额
+    - 用户量
+    - 订单数
+  rag-keywords:
+    - 流程
+    - 制度
+    - 怎么申请
+    - 如何申请
+    - 文档
+    - 手册
+    - 报销
