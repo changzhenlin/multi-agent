@@ -84,6 +84,33 @@ paths:
                   $ref: '#/components/schemas/ChatMessageResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/admin/documents:
+    post:
+      summary: Upload a knowledge document and split it into retrievable chunks.
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                sourceUri:
+                  type: string
+      responses:
+        '200':
+          description: Uploaded document summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
 components:
   parameters:
     SessionId:
@@ -182,6 +209,20 @@ components:
         createdAt:
           type: string
           format: date-time
+    DocumentUploadResponse:
+      type: object
+      required:
+        - documentId
+        - title
+        - totalChunks
+      properties:
+        documentId:
+          type: string
+        title:
+          type: string
+        totalChunks:
+          type: integer
+          format: int32
     ErrorResponse:
       type: object
       required:

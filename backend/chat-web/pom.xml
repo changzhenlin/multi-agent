@@ -22,6 +22,21 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.company.chat</groupId>
+            <artifactId>agent-simple</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.company.chat</groupId>
+            <artifactId>agent-rag</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.company.chat</groupId>
+            <artifactId>agent-sql</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
